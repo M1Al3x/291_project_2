@@ -169,30 +169,36 @@ def add_cast_member(name_basics, title_basics, title_principals):
         print('you will be returned to the homescreen')
         return
     
-    category = input('Please enter the category: ')
-    
+    title_id = input('Please enter a movie title id: ')
     results = list(title_basics.find({"tconst": title_id}))
     if results == []:
         print('The movie title id does not exist please enter a valid id!!')
         print('you will be returned to the homescreen')
         return    
     
-    title_id = input('Please enter a movie title id: ')
+    category = input('Please enter the category: ')
+    orderings = list(title_principals.find({"tconst": title_id}))
+
+    ordering = []
+    for order in orderings:
+        order['ordering'] = int(order['ordering'])
+        ordering.append(order['ordering'])
     
-    orderings = list(title_principals.find({"tconst": title_id}).select('ordering'))
     # order them
-    if orderings == []:
+    if ordering == []:
         ordering = 1
     else:
-        ordering =  max(orderings) + 1
+        ordering =  str(max(ordering) + 1)
     
     title_principals.insert_one(
-        { 'tconst':movie_id,
+        { 'tconst':title_id,
           'ordering':ordering,
           'nconst':cast_id,
           'category':category,
           'job':'\\N',
-          'characters': '\\N'})     
+          'characters': '\\N'})  
+    
+    print('This added succesfully!')
     return
 
 def main():
