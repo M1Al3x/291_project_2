@@ -33,11 +33,16 @@ def search_movie(sid, cid):
         seeDetailedInfo(movies[indexEd])
     return
 
-def search_by_key_words():
+def search_by_key_words(title_basics):
     keywords = input("Enter keywords for searching movie: ")
-    keywords_list = keywords.split()
-    title_basics.createIndex({"primaryTitle":"text","startYear":"text"})   
-    output_movies = title_basics.find({"$text": {"$search": keywords_list}})
+    # title_basics.create_index({"$primaryTitle": "text"}, {"$startYear":"text"})  
+    title_basics.create_index([("primaryTitle", 'text')])
+    arr_keys = []
+    for keyword in keywords:
+        arr_keys.append({"$text": {"$search": keyword}})
+    # title_basics.create_index([("startYear", 'text')])
+    stages = {"$and": arr_keys}
+    output_movies = title_basics.find(stages)
     return output_movies
 
 def seeDetailedInfo(movie):
