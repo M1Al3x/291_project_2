@@ -15,8 +15,8 @@ def connect():
     title_ratings = db["title_ratings"]  
     return name_basics, title_basics, title_principals, title_ratings
 
-def search_movie(db):
-    movies = search_by_key_words() 
+def search_movie(title_basics, title_ratings, name_basics, title_principals):
+    movies = search_by_key_words(title_basics) 
     print("Movies by the given search: ")
     index = 0
     indexEd = 0
@@ -28,7 +28,7 @@ def search_movie(db):
                 print(str(index+1) + ". " + str(movie))
         i = input("In order to view detailed information about movie enter its number.\nIf you want to see next movies in the search, enter 'n'. \nIf you want to serach another movie press s. \nif you want to return to homepage enter 'q': ")
         if i=="s":
-            movies = search_by_key_words() 
+            movies = search_by_key_words(title_basics) 
             print("Movies by the given search: ")
             index = 0
             indexEd = 0
@@ -47,17 +47,19 @@ def search_movie(db):
                 indexEd = indexEd + 1
         
     if i=="c":
-        seeDetailedInfo(movies[indexEd])
+        seeDetailedInfo(movies[indexEd], title_ratings, name_basics, title_principals)
     return
 
-def search_by_key_words(db):
+def search_by_key_words(title_basics):
     keywords = input("Enter keywords for searching movie: ")
-    keywords_list = keywords.split()
-    title_basics.createIndex({"primaryTitle":"text","startYear":"text"})   
-    output_movies = title_basics.find({"$text": {"$search": keywords_list}})
+    # title_basics.create_index({"$primaryTitle": "text"}, {"$startYear":"text"})  
+    title_basics.create_index([("primaryTitle", 'text')])
+    # title_basics.create_index([("startYear", 'text')])
+    stages = {"$text": {"$search": keywords}}
+    output_movies = title_basics.find(stages)
     return output_movies
 
-def seeDetailedInfo(movie):
+def seeDetailedInfo(movie, title_ratings, name_basics, title_principals):
     inpMovie = ''
     print("\n\nDetailed information for " + movie)
     movie_title = movie["primaryTitle"]
@@ -74,7 +76,7 @@ def seeDetailedInfo(movie):
         print(actor_name + " played " + characters)
     return 
 
-def searchForGenres():
+def searchForGenres(title_basics):
     genre = input("What genre you want to search for: ")
     minVotes = input("What is the minimum number of votes: ")
     stages = [{"$lookup": {
@@ -204,5 +206,6 @@ def add_cast_member(name_basics, title_basics, title_principals):
 def main():
     name_basics, title_basics, title_principals, title_ratings = connect()
     #add_movie(title_basics)
-    add_cast_member(name_basics, title_basics, title_principals)
+    #add_cast_member(name_basics, title_basics, title_principals)
+    search_movie(title_basics, title_ratings, name_basics, title_principals)
 main()
