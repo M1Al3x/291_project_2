@@ -1,4 +1,5 @@
 import json
+import pymongo
 from pymongo import MongoClient
 
 def connect():
@@ -25,8 +26,10 @@ def search_movie(title_basics, title_ratings, name_basics, title_principals):
     while(i!="c"):
         if i=="n":
             for movie in movies:
-                print(str(index+1) + ". " + str(movie))
-        i = input("In order to view detailed information about movie enter its number.\nIf you want to see next movies in the search, enter 'n'. \nIf you want to serach another movie press s. \nif you want to return to homepage enter 'q': ")
+                print(str(index+1), movie)
+                index = index+ 1
+               
+        i = input("In order to view detailed information about movie enter its number.\nIf you want to serach another movie press s. \nif you want to return to homepage enter 'q': ")
         if i=="s":
             movies = search_by_key_words(title_basics) 
             print("Movies by the given search: ")
@@ -51,43 +54,58 @@ def search_movie(title_basics, title_ratings, name_basics, title_principals):
     return
 
 def search_by_key_words(title_basics):
-    keywords = input("Enter keywords for searching movie: ")
+    continue_program = True
+    
+    # while continue_program:
+        
+    title_basics.drop_indexes()
+    keywords = input("Enter keywords for searching movie: ").split(' ')
+
     # title_basics.create_index({"$primaryTitle": "text"}, {"$startYear":"text"})  
-    title_basics.create_index([("primaryTitle", 'text')])
+    title_basics.create_index([("primaryTitle", pymongo.TEXT),
+                            ("startYear", pymongo.TEXT)])
+    strKeys = ''
+    for keyword in keywords:
+        strKeys = strKeys + "\"" + keyword + "\""   
+
     # title_basics.create_index([("startYear", 'text')])
-    stages = {"$text": {"$search": keywords}}
+    stages = {"$text": {"$search": strKeys}}
     output_movies = title_basics.find(stages)
-    return output_movies
+    return list(output_movies)
 
 def seeDetailedInfo(movie, title_ratings, name_basics, title_principals):
     inpMovie = ''
-    print("\n\nDetailed information for " + movie)
+    print("\n\nDetailed information for ", movie['primaryTitle'])
     movie_title = movie["primaryTitle"]
     tconst = movie["tconst"]
-    output_rating = title_ratings.find({"$tconst": {"$eq": tconst}})
-    print("The rating is: " + str(output_rating["averageRating"]))
-    print("The number of votes is: " + str(output_rating["numVotes"]))
-    roles = title_principals.find({"$tconst": {"$eq": tconst}})
+    output_rating = list(title_ratings.find({"tconst": tconst}))
+    print("The rating is: " + str(output_rating[0]["averageRating"]))
+    print("The number of votes is: " + str(output_rating[0]["numVotes"]))
+    roles = list(title_principals.find({"tconst": tconst}))
     for person in roles:
         nconst = person["nconst"]
         characters = person["characters"]
-        actor = name_basics.find({"$nconst": {"$eq": nconst}})
-        actor_name = actor["primaryName"]
+        actor = list(name_basics.find({"nconst": nconst}))
+        actor_name = actor[0]["primaryName"]
         print(actor_name + " played " + characters)
     return 
 
-def searchForGenres(title_basics):
+def searchForGenres(title_basics, title_ratings):
     genre = input("What genre you want to search for: ")
     minVotes = input("What is the minimum number of votes: ")
+    string = 'genres.'+genre
+    
+    
     stages = [{"$lookup": {
-              "$From": title_ratings,
-              "$LocalField": "$tconst",
-              "$foreignField": "$tconst",
-              "$as": "$tconst"}},
-              {"$in": {genre, "$genre"}},
-              {'$match': {{ "$toInt": '$integer' }: {'$gt':minVotes}}},
-              {'$sort': {'averageRating': -1}}]
-    result = title_basics.aggregate(stages)
+              "from": 'title_ratings',
+              "localField": "tconst",
+              "foreignField": "tconst",
+              "as": "tconst"}},
+              #{'$match':{'genres':{"$in": [genre]}}},
+              #{'$match': {'numVotes': {'$gt':minVotes}}}
+              #{'$sort': {'averageRating': -1}}]
+              ]
+    result = list(title_basics.aggregate(stages))
     for r in result:
         print(r)
     return
@@ -207,5 +225,6 @@ def main():
     name_basics, title_basics, title_principals, title_ratings = connect()
     #add_movie(title_basics)
     #add_cast_member(name_basics, title_basics, title_principals)
-    search_movie(title_basics, title_ratings, name_basics, title_principals)
+    #search_movie(title_basics, title_ratings, name_basics, title_principals)
+    searchForGenres(title_basics, title_ratings)
 main()
