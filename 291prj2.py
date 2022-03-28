@@ -1,5 +1,24 @@
-def search_movie(sid, cid):
-    movies = search_by_key_words() 
+import json
+import pymongo
+import re
+from pymongo import MongoClient
+
+def connect():
+    # to connect to client and database
+    client = MongoClient('mongodb://localhost:27017')
+    
+    # Create or open a database on the server.
+    db = client["291db"]
+    
+    # all the collections create or open them
+    name_basics = db["name_basics"]
+    title_basics = db["title_basics"]
+    title_principals = db["title_principals"]
+    title_ratings = db["title_ratings"]  
+    return name_basics, title_basics, title_principals, title_ratings, db
+
+def search_movie(title_basics, title_ratings, name_basics, title_principals):
+    movies = search_by_key_words(title_basics) 
     print("Movies by the given search: ")
     index = 0
     indexEd = 0
@@ -8,10 +27,12 @@ def search_movie(sid, cid):
     while(i!="c"):
         if i=="n":
             for movie in movies:
-                print(str(index+1) + ". " + str(movie))
-        i = input("In order to view detailed information about movie enter its number.\nIf you want to see next movies in the search, enter 'n'. \nIf you want to serach another movie press s. \nif you want to return to homepage enter 'q': ")
+                print(str(index+1), movie)
+                index = index+ 1
+               
+        i = input("In order to view detailed information about movie enter its number.\nIf you want to serach another movie press s. \nif you want to return to homepage enter 'q': ")
         if i=="s":
-            movies = search_by_key_words() 
+            movies = search_by_key_words(title_basics) 
             print("Movies by the given search: ")
             index = 0
             indexEd = 0
@@ -30,76 +51,194 @@ def search_movie(sid, cid):
                 indexEd = indexEd + 1
         
     if i=="c":
-        seeDetailedInfo(movies[indexEd])
+        seeDetailedInfo(movies[indexEd], title_ratings, name_basics, title_principals)
     return
 
 def search_by_key_words(title_basics):
-    keywords = input("Enter keywords for searching movie: ")
-    # title_basics.create_index({"$primaryTitle": "text"}, {"$startYear":"text"})  
-    title_basics.create_index([("primaryTitle", 'text')])
-    arr_keys = []
-    for keyword in keywords:
-        arr_keys.append({"$text": {"$search": keyword}})
-    # title_basics.create_index([("startYear", 'text')])
-    stages = {"$and": arr_keys}
-    output_movies = title_basics.find(stages)
-    return output_movies
+    continue_program = True
+    
+    # while continue_program:
+        
+    title_basics.drop_indexes()
+    keywords = input("Enter keywords for searching movie: ").split(' ')
 
-def seeDetailedInfo(movie):
+    # title_basics.create_index({"$primaryTitle": "text"}, {"$startYear":"text"})  
+    title_basics.create_index([("primaryTitle", pymongo.TEXT),
+                            ("startYear", pymongo.TEXT)])
+    strKeys = ''
+    for keyword in keywords:
+        strKeys = strKeys + "\"" + keyword + "\""   
+
+    # title_basics.create_index([("startYear", 'text')])
+    stages = {"$text": {"$search": strKeys}}
+    output_movies = title_basics.find(stages)
+    title_basics.drop_indexes()
+    return list(output_movies)
+
+def seeDetailedInfo(movie, title_ratings, name_basics, title_principals):
     inpMovie = ''
-    print("\n\nDetailed information for " + movie)
+    print("\n\nDetailed information for ", movie['primaryTitle'])
     movie_title = movie["primaryTitle"]
     tconst = movie["tconst"]
-    output_rating = title_ratings.find({"$tconst": {"$eq": tconst}})
-    print("The rating is: " + str(output_rating["averageRating"]))
-    print("The number of votes is: " + str(output_rating["numVotes"]))
-    roles = title_principals.find({"$tconst": {"$eq": tconst}})
+    output_rating = list(title_ratings.find({"tconst": tconst}))
+    print("The rating is: " + str(output_rating[0]["averageRating"]))
+    print("The number of votes is: " + str(output_rating[0]["numVotes"]))
+    roles = list(title_principals.find({"tconst": tconst}))
     for person in roles:
         nconst = person["nconst"]
         characters = person["characters"]
-        actor = name_basics.find({"$nconst": {"$eq": nconst}})
-        actor_name = actor["primaryName"]
+        actor = list(name_basics.find({"nconst": nconst}))
+        actor_name = actor[0]["primaryName"]
         print(actor_name + " played " + characters)
     return 
 
-def searchForGenres():
+def searchForGenres(db, title_basics, title_ratings):
     genre = input("What genre you want to search for: ")
-    minVotes = input("What is the minimum number of votes: ")
-    stages = [{"$lookup": {
-              "$From": title_ratings,
-              "$LocalField": "$tconst",
-              "$foreignField": "$tconst",
-              "$as": "$tconst"}},
-              {"$in": {genre, "$genre"}},
-              {'$match': {{ "$toInt": '$integer' }: {'$gt':minVotes}}},
-              {'$sort': {'averageRating': -1}}]
-    result = title_basics.aggregate(stages)
-    for r in result:
-        print(r)
+    minVotes = int(input("What is the minimum number of votes: "))
+    title_ratings.drop_indexes()
+    # movies = list(title_basics.find({'genres':{"$in": [genre]}})) 
+    
+    stages = [{'$unwind': '$genres'},
+              {"$match": {"genres": re.compile(genre, re.IGNORECASE)}}]
+              
+    results = list(title_basics.aggregate(stages))
+    tconst_list = []
+    print_dic = {}
+    for result in results:
+        tconst_list.append(result['tconst'])
+        print_dic[result['tconst']] = result['primaryTitle']
+    
+    stages2 = [{'$match':{'tconst':{"$in": tconst_list}}},
+               {'$set': {'numVotes': {'$toInt':'$numVotes'}}},
+               {'$match':{'numVotes':{'$gte': minVotes}}}, 
+               {'$sort': {'averageRating': -1}}]
+    movies = list(title_ratings.aggregate(stages2)) 
+    
+    print('title, rating')
+    for movie in movies:
+        print(print_dic[movie['tconst']], movie['averageRating'],movie['numVotes'])
+    
+    print('done!')
     return
 
-def searchForCast():
+def searchForCast(name_basics, title_princpals, title_basics):
     name = input("What is cast/crew member name: ")
-    stages = [{"$primaryName": {"$eq": name}},
-              {"$lookup": {
-               "$From": title_principals,
-               "$LocalField": "$nconst",
-               "$foreignField": "nconst",
-               "$as": "$nconst"}},
-              {"$lookup": {
-              "$From": title_basics,
-              "$LocalField": "$tconst",
-              "$foreignField": "$tconst",
-              "$as": "$tconst"}},
-              {"$group": {
-                      nconst: "$category",
-                      items: {"$push": "$item"}
-                  }}              
-              ]  
-
-
-
-        
-    
+    stages = [{"$match": {"primaryName": re.compile(name, re.IGNORECASE)}}]  
+    results = list(name_basics.aggregate(stages))
+    nconst = results[0]['nconst']
+    professions = results[0]['primaryProfession']
+    for profession in professions:
+        print(profession + ":\n")
+        stages1 = [{"$match": {"nconst": re.compile(nconst, re.IGNORECASE)}},
+                   {"$match": {"category": re.compile(profession, re.IGNORECASE)}}]
+        results = list(title_principals.aggregate(stages1))
+        for principal in results:
+            tconst = principal["tconst"]
+            stages2 = [{"$match": {"tconst": re.compile(tconst, re.IGNORECASE)}}]
+            movie = list(title_basics.aggregate(stages2))
+            print(movie[0]["Title"] + ": job of " + principal["job"] + " as character " + principal["characters"])
+        print("\n")
+    return
             
-        
+    
+    
+
+def add_movie(title_basics):
+    
+    print("This is the add movie function where you can add a movie\nby providing a unique id, a title, a start year, a running time and a list of genres")
+    movie_id = input('Please enter a unique id: ')
+    
+    # find all the results for the movie_id
+    results = list(title_basics.find({"tconst": movie_id}))
+    
+    if results != []:
+        print('this movie id already exists, please enter a unique id')
+        print('you will be returned to the home screen')
+        return
+    
+    # the id is unique
+    title = input('PLease enter the title: ')
+    start_year = input('PLease enter the start year: ')
+    running_time  = input('PLease enter the running time: ')
+    genres = []
+    print('please enter a list of genres for this movie, to end adding enter "q"')
+    user_input = ' '
+    while user_input.lower() != 'q':
+        user_input = input('please enter a genre or "q": ')
+        if user_input.lower() != 'q':
+            genres.append(user_input)
+        if user_input == [] and user_input.lower() == 'q':
+            # if the user did not enter anything
+            print('you must enter a genre, cannot quit nowwww!!!!')
+            user_input = ' '
+            
+    title_basics.insert_one(
+        { 'tconst':movie_id,
+         'titleType':'movie',
+         'primaryTitle':title,
+         'originalTitle':title,
+         'isAdult':"\\N",
+         'startYear':start_year,
+         'endYear':'\\N',
+         'runtimeMinutes': running_time,
+         'genres':genres})   
+    
+    print('It has been added succesfully!\nyou will be returned to the homescreen now')
+    return
+
+def add_cast_member(name_basics, title_basics, title_principals):
+    '''
+    The user should be able to add a row to title_principals by providing a cast/crew member id, 
+    a title id, and a category. The provided title and person ids should exist in name_basics and 
+    title_basics respectively (otherwise, proper messages should be given), the ordering should be 
+    set to the largest ordering listed for the title plus one (or 1 if the title is not listed in 
+    title_principals) and any other field that is not provided (including job and characters) set to Null.
+    '''
+    
+    cast_id = input('Please enter a cast/crew member id: ')
+    # check to see if it is in the name_basics and 
+    results = list(name_basics.find({"nconst": cast_id}))
+    if results == []:
+        print('The cast memeber id does not exist please enter a valid id!!')
+        print('you will be returned to the homescreen')
+        return
+    
+    title_id = input('Please enter a movie title id: ')
+    results = list(title_basics.find({"tconst": title_id}))
+    if results == []:
+        print('The movie title id does not exist please enter a valid id!!')
+        print('you will be returned to the homescreen')
+        return    
+    
+    category = input('Please enter the category: ')
+    orderings = list(title_principals.find({"tconst": title_id}))
+
+    ordering = []
+    for order in orderings:
+        order['ordering'] = int(order['ordering'])
+        ordering.append(order['ordering'])
+    
+    # order them
+    if ordering == []:
+        ordering = 1
+    else:
+        ordering =  str(max(ordering) + 1)
+    
+    title_principals.insert_one(
+        { 'tconst':title_id,
+          'ordering':ordering,
+          'nconst':cast_id,
+          'category':category,
+          'job':'\\N',
+          'characters': '\\N'})  
+    
+    print('This added succesfully!')
+    return
+
+def main():
+    name_basics, title_basics, title_principals, title_ratings, db = connect()
+    #add_movie(title_basics)
+    #add_cast_member(name_basics, title_basics, title_principals)
+    #search_movie(title_basics, title_ratings, name_basics, title_principals)
+    searchForGenres(db, title_basics, title_ratings)
+main()
