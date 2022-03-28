@@ -1,5 +1,6 @@
 import json
 import pymongo
+import re
 from pymongo import MongoClient
 
 def connect():
@@ -14,7 +15,7 @@ def connect():
     title_basics = db["title_basics"]
     title_principals = db["title_principals"]
     title_ratings = db["title_ratings"]  
-    return name_basics, title_basics, title_principals, title_ratings
+    return name_basics, title_basics, title_principals, title_ratings, db
 
 def search_movie(title_basics, title_ratings, name_basics, title_principals):
     movies = search_by_key_words(title_basics) 
@@ -71,6 +72,7 @@ def search_by_key_words(title_basics):
     # title_basics.create_index([("startYear", 'text')])
     stages = {"$text": {"$search": strKeys}}
     output_movies = title_basics.find(stages)
+    title_basics.drop_indexes()
     return list(output_movies)
 
 def seeDetailedInfo(movie, title_ratings, name_basics, title_principals):
@@ -90,44 +92,44 @@ def seeDetailedInfo(movie, title_ratings, name_basics, title_principals):
         print(actor_name + " played " + characters)
     return 
 
-def searchForGenres(title_basics, title_ratings):
+def searchForGenres(db, title_basics, title_ratings):
     genre = input("What genre you want to search for: ")
-    minVotes = input("What is the minimum number of votes: ")
-    string = 'genres.'+genre
+    minVotes = int(input("What is the minimum number of votes: "))
+    title_ratings.drop_indexes()
+    # movies = list(title_basics.find({'genres':{"$in": [genre]}})) 
     
+    stages = [{'$unwind': '$genres'},
+              {"$match": {"genres": re.compile(genre, re.IGNORECASE)}}]
+              
+    results = list(title_basics.aggregate(stages))
+    tconst_list = []
+    print_dic = {}
+    for result in results:
+        tconst_list.append(result['tconst'])
+        print_dic[result['tconst']] = result['primaryTitle']
     
-    stages = [{"$lookup": {
-              "from": 'title_ratings',
-              "localField": "tconst",
-              "foreignField": "tconst",
-              "as": "tconst"}},
-              #{'$match':{'genres':{"$in": [genre]}}},
-              #{'$match': {'numVotes': {'$gt':minVotes}}}
-              #{'$sort': {'averageRating': -1}}]
-              ]
-    result = list(title_basics.aggregate(stages))
-    for r in result:
-        print(r)
+    stages2 = [{'$match':{'tconst':{"$in": tconst_list}}},
+               {'$set': {'numVotes': {'$toInt':'$numVotes'}}},
+               {'$match':{'numVotes':{'$gte': minVotes}}}, 
+               {'$sort': {'averageRating': -1}}]
+    movies = list(title_ratings.aggregate(stages2)) 
+    
+    print('title, rating')
+    for movie in movies:
+        print(print_dic[movie['tconst']], movie['averageRating'],movie['numVotes'])
+    
+    print('done!')
     return
 
 def searchForCast():
     name = input("What is cast/crew member name: ")
-    stages = [{"$primaryName": {"$eq": name}},
-              {"$lookup": {
-               "$From": title_principals,
-               "$LocalField": "$nconst",
-               "$foreignField": "$nconst",
-               "$as": "$nconst"}},
-              {"$lookup": {
-              "$From": title_basics,
-              "$LocalField": "$tconst",
-              "$foreignField": "$tconst",
-              "$as": "$tconst"}},
-              {"$group": {
-                      '$_id': "$category",
-                      items: {"$push": "$item"}
-                  }}              
-              ]  
+    stages = [{"$match": {"primaryName": re.compile(name, re.IGNORECASE)}}]  
+    results = list(title_basics.aggregate(stages))
+    nconst = results[0]['nconst']
+    
+    stages1 = []
+    
+    
 
 def add_movie(title_basics):
     
@@ -222,9 +224,9 @@ def add_cast_member(name_basics, title_basics, title_principals):
     return
 
 def main():
-    name_basics, title_basics, title_principals, title_ratings = connect()
+    name_basics, title_basics, title_principals, title_ratings, db = connect()
     #add_movie(title_basics)
     #add_cast_member(name_basics, title_basics, title_principals)
     #search_movie(title_basics, title_ratings, name_basics, title_principals)
-    searchForGenres(title_basics, title_ratings)
+    searchForGenres(db, title_basics, title_ratings)
 main()
