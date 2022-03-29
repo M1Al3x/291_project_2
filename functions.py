@@ -26,11 +26,12 @@ def search_movie(title_basics, title_ratings, name_basics, title_principals):
     indexToCheck = -1
     while(i!="c"):
         if i=="n":
+            movies = list(movies)
             for movie in movies:
                 print(str(index+1), movie)
                 index = index+ 1
                
-        i = input("In order to view detailed information about movie enter its number.\nIf you want to serach another movie press s. \nif you want to return to homepage enter 'q': ")
+        i = input("In order to view detailed information about movie enter its number.\nIf you want to search another movie press s. \nif you want to return to homepage enter 'q': ")
         if i=="s":
             movies = search_by_key_words(title_basics) 
             print("Movies by the given search: ")
@@ -52,6 +53,7 @@ def search_movie(title_basics, title_ratings, name_basics, title_principals):
         
     if i=="c":
         seeDetailedInfo(movies[indexEd], title_ratings, name_basics, title_principals)
+    print('\n')
     return
 
 def search_by_key_words(title_basics):
@@ -67,13 +69,12 @@ def search_by_key_words(title_basics):
                             ("startYear", pymongo.TEXT)])
     strKeys = ''
     for keyword in keywords:
-        strKeys = strKeys + "\"" + keyword + "\""   
+        strKeys = strKeys + "i\"" + keyword + "\""   
 
     # title_basics.create_index([("startYear", 'text')])
     stages = {"$text": {"$search": strKeys}}
     output_movies = title_basics.find(stages)
-    title_basics.drop_indexes()
-    return list(output_movies)
+    return output_movies
 
 def seeDetailedInfo(movie, title_ratings, name_basics, title_principals):
     inpMovie = ''
@@ -118,19 +119,33 @@ def searchForGenres(db, title_basics, title_ratings):
     for movie in movies:
         print(print_dic[movie['tconst']], movie['averageRating'],movie['numVotes'])
     
-    print('done!')
+    print('done!\n')
     return
 
-def searchForCast():
+def searchForCast(name_basics, title_principals, title_basics):
     name = input("What is cast/crew member name: ")
     stages = [{"$match": {"primaryName": re.compile(name, re.IGNORECASE)}}]  
-    results = list(title_basics.aggregate(stages))
-    nconst = results[0]['nconst']
-    
-    stages1 = []
-    
-    
-
+    results = list(name_basics.aggregate(stages))
+    for result in results:
+        print('The cast memeber name: '+result['primaryName'])
+        print('The cast member id:    '+ result['nconst'])
+        print('Professions: ', result['primaryProfession'])
+        
+        # search for all the places where he played a role 
+        nconst = result["nconst"]
+        stages1 = {"nconst": nconst}
+        principals = list(title_principals.find(stages1))
+        
+        print('Title, job and chracters played are as following and value "\N" means there is None:')
+        for principal in principals:
+            tconst = principal["tconst"]
+            stages2 = [{"$match": {"tconst": re.compile(tconst, re.IGNORECASE)}}]
+            movie = list(title_basics.aggregate(stages2))
+            print(movie[0]["primaryTitle"] + ": job of " + principal["job"] + " as character " + principal["characters"])
+            
+        print("\n")
+    return
+            
 def add_movie(title_basics):
     
     print("This is the add movie function where you can add a movie\nby providing a unique id, a title, a start year, a running time and a list of genres")
@@ -224,9 +239,34 @@ def add_cast_member(name_basics, title_basics, title_principals):
     return
 
 def main():
-    name_basics, title_basics, title_principals, title_ratings, db = connect()
-    #add_movie(title_basics)
-    #add_cast_member(name_basics, title_basics, title_principals)
-    #search_movie(title_basics, title_ratings, name_basics, title_principals)
-    searchForGenres(db, title_basics, title_ratings)
+    continue_program = True
+    while continue_program:
+        print('Welcome to the program! to quit enter "q" to continue enter one of the choices')
+        print('1.search for titles')
+        print('2.search for genres')
+        print('3.search for cast/crew members')
+        print('4.add a movie')
+        print('5.add a cast/crew member')
+        
+        # connect to the db
+        name_basics, title_basics, title_principals, title_ratings, db = connect()
+        choice = input('\n\nplease enter your choice: ').lower()
+        if choice == 'q':
+            continue_program = False
+        elif choice == '1':
+            search_movie(title_basics, title_ratings, name_basics, title_principals)
+        elif choice == '2':
+            searchForGenres(db, title_basics, title_ratings)
+        elif choice == '3':
+            searchForCast(name_basics, title_principals, title_basics)
+        elif choice == '4':
+            add_movie(title_basics)
+        elif choice == '5':
+            add_cast_member(name_basics, title_basics, title_principals)
+        else:
+            print('\nplease enter a valid choice!!!!')
+        
+        
+    
+    print('Thank you for using the program will close now')
 main()
