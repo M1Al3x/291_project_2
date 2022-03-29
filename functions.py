@@ -141,11 +141,11 @@ def searchForCast(name_basics, title_principals, title_basics):
             tconst = principal["tconst"]
             stages2 = [{"$match": {"tconst": re.compile(tconst, re.IGNORECASE)}}]
             movie = list(title_basics.aggregate(stages2))
-            if principal["job"] == '\N' and principal["characters"] == '\N':
+            if principal["job"] == '\\N' and principal["characters"] == '\\N':
                 print(movie[0]["primaryTitle"])
-            elif principal["job"] == '\N':
+            elif principal["job"] == '\\N':
                 print(movie[0]["primaryTitle"] + " as character " + principal["characters"])
-            elif principal["characters"] == '\N':
+            elif principal["characters"] == '\\N':
                 print(movie[0]["primaryTitle"] + ": job of " + principal["job"])
             else:
                 print(movie[0]["primaryTitle"] + ": job of " + principal["job"] + " as character " + principal["characters"])
@@ -276,7 +276,6 @@ def main():
         else:
             print('\nplease enter a valid choice!!!!')
         
-        
-    
+
     print('Thank you for using the program will close now')
 main()
