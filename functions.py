@@ -136,12 +136,19 @@ def searchForCast(name_basics, title_principals, title_basics):
         stages1 = {"nconst": nconst}
         principals = list(title_principals.find(stages1))
         
-        print('Title, job and chracters played are as following and value "\N" means there is None:')
+        print('Title, job and chracters played are as following:')
         for principal in principals:
             tconst = principal["tconst"]
             stages2 = [{"$match": {"tconst": re.compile(tconst, re.IGNORECASE)}}]
             movie = list(title_basics.aggregate(stages2))
-            print(movie[0]["primaryTitle"] + ": job of " + principal["job"] + " as character " + principal["characters"])
+            if principal["job"] == '\N' and principal["characters"] == '\N':
+                print(movie[0]["primaryTitle"])
+            elif principal["job"] == '\N':
+                print(movie[0]["primaryTitle"] + " as character " + principal["characters"])
+            elif principal["characters"] == '\N':
+                print(movie[0]["primaryTitle"] + ": job of " + principal["job"])
+            else:
+                print(movie[0]["primaryTitle"] + ": job of " + principal["job"] + " as character " + principal["characters"])
             
         print("\n")
     return
@@ -225,7 +232,10 @@ def add_cast_member(name_basics, title_basics, title_principals):
     if ordering == []:
         ordering = 1
     else:
-        ordering =  str(max(ordering) + 1)
+        if max(ordering) > 10:
+            ordering =  '10'
+        else:
+            ordering =  str(max(ordering) + 1)
     
     title_principals.insert_one(
         { 'tconst':title_id,
